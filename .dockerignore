@@ -1,0 +1,39 @@
+# Local settings & secrets
+.env
+.env.local
+
+# Virtual environments
+.venv/
+env/
+venv/
+ENV/
+
+# Python Cache & Build Artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.ipynb_checkpoints/
+*.egg-info/
+dist/
+build/
+
+# Local runs & temporary directories
+temp_*/
+uploads/
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# IDE configurations
+.vscode/
+.idea/
+.agents/
+
+# Docker build logs & other local files
+docker-compose.yml
+Dockerfile.local
+docker/*.log
+*.log

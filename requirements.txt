@@ -1,0 +1,6 @@
+streamlit>=1.45.0
+plotly>=6.0.0
+python-dotenv
+opencv-python-headless
+pydantic
+requests

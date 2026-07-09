@@ -1,0 +1,47 @@
+# Environment
+.env
+.venv/
+env/
+venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temp
+temp_*/
+*.tmp
+
+# Videos (keep sample_videos)
+*.mp4
+!sample_videos/*.mp4
+
+# Logs
+*.log
+
+# Uploads
+uploads/
+
+# Old Frontend
+frontend/
+
+# Old Notebooks
+rambler.ipynb
+rambler_2.0.ipynb
+
+# Old Flask Server
+server.py
