@@ -523,12 +523,6 @@ if "tasks_results" not in st.session_state:
     st.session_state.tasks_results = None
 if "results_json_data" not in st.session_state:
     st.session_state.results_json_data = None
-if "pipeline_running" not in st.session_state:
-    st.session_state.pipeline_running = False
-if "pipeline_args" not in st.session_state:
-    st.session_state.pipeline_args = {}
-
-
 # ── Constants ─────────────────────────────────────────────────
 STYLE_META = {
     "formal":            {"emoji": "🎩", "label": "Formal",    "css": "formal",    "color": "#448aff"},
@@ -638,427 +632,8 @@ def build_radar_chart(scores_dict):
     return fig
 
 
-# ── Header (AMD Dynamic Logo Layout) ──────────────────────────
-if logo_b64:
-    header_html = f"""
-    <div class="hero-header">
-        <div class="hero-brand-container">
-            <img class="hero-logo-img" src="data:image/png;base64,{logo_b64}" />
-            <div class="hero-title" style="color: #ed1c24; background: none; -webkit-text-fill-color: initial;">Rambler</div>
-        </div>
-        <div class="hero-subtitle">AI Video Captioning Agent · Multi-Model Gemma Cascade</div>
-        <div class="hero-team"><strong>Omnix</strong> · Abdelrahman Amr Ahmed Abdullah · AMD Hackathon Track 2</div>
-    </div>
-    """
-else:
-    header_html = """
-    <div class="hero-header">
-        <div class="hero-brand-container">
-            <div class="hero-title" style="color: #ed1c24; background: none; -webkit-text-fill-color: initial;">🎬 Rambler</div>
-        </div>
-        <div class="hero-subtitle">AI Video Captioning Agent · Multi-Model Gemma Cascade</div>
-        <div class="hero-team"><strong>Omnix</strong> · Abdelrahman Amr Ahmed Abdullah · AMD Hackathon Track 2</div>
-    </div>
-    """
-st.markdown(header_html, unsafe_allow_html=True)
-
-# ── Pipeline Run Orchestration (Top-Level Hijack) ─────────────
-if st.session_state.get("pipeline_running", False):
-    args = st.session_state.pipeline_args
-    mode = args.get("mode")
-    
-    st.markdown('<div class="metric-card" style="border-color: rgba(237, 28, 36, 0.3); margin-top: 1rem; margin-bottom: 2rem;">', unsafe_allow_html=True)
-    st.markdown("### ⚡ Running Gemma Cascade Pipeline...")
-    
-    if mode == "single":
-        progress_bar = st.progress(0, text="Initializing pipeline...")
-        step_cols = st.columns(len(PIPELINE_STEPS))
-        step_placeholders = []
-        for icon, label in PIPELINE_STEPS:
-            ph = st.empty()
-            ph.markdown(f'<div class="pipeline-step-box step-pending">{icon}<br>{label}</div>', unsafe_allow_html=True)
-            step_placeholders.append(ph)
-            
-        detail_placeholder = st.empty()
-        current_step_idx = [0]
-        
-        def on_progress(step, detail="", progress=0):
-            progress_bar.progress(min(progress, 1.0), text=detail)
-            step_idx = STEP_KEYS.index(step) if step in STEP_KEYS else current_step_idx[0]
-            for i, (icon, label) in enumerate(PIPELINE_STEPS):
-                if i < step_idx:
-                    step_placeholders[i].markdown(f'<div class="pipeline-step-box step-complete">{icon}<br>{label}</div>', unsafe_allow_html=True)
-                elif i == step_idx:
-                    step_placeholders[i].markdown(f'<div class="pipeline-step-box step-active">{icon}<br>{label}</div>', unsafe_allow_html=True)
-            current_step_idx[0] = step_idx
-            detail_placeholder.caption(f"🔄 {detail}")
-            
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
-            tmp.write(args["video_bytes"])
-            tmp_path = tmp.name
-            
-        try:
-            results = pipeline.run_pipeline(
-                video_path=tmp_path,
-                on_progress=on_progress,
-                eval_threshold=args["threshold"],
-                max_correction_rounds=args["max_rounds"],
-            )
-            
-            st.session_state.results = results
-            st.session_state.video_bytes = args["video_bytes"]
-            
-            st.session_state.history.append({
-                "filename": args["filename"],
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                "status": "complete",
-                "results": results,
-                "video_bytes": args["video_bytes"]
-            })
-            st.toast("🎉 Captions generated successfully!", icon="✅")
-            
-        except Exception as e:
-            st.error(f"Pipeline failed: {str(e)}")
-            st.session_state.history.append({
-                "filename": args["filename"],
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                "status": "error",
-                "results": None,
-                "video_bytes": None
-            })
-        finally:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-                
-            st.session_state.pipeline_running = False
-            st.session_state.pipeline_args = {}
-            st.rerun()
-            
-    elif mode == "batch":
-        tasks_data = args["tasks_data"]
-        batch_eval_threshold = args["threshold"]
-        batch_max_rounds = args["max_rounds"]
-        
-        progress_bar = st.progress(0, text="Starting batch process...")
-        status_text = st.empty()
-        
-        batch_results = []
-        results_json_output = []
-        
-        import requests
-        for idx, t in enumerate(tasks_data):
-            task_id = t["task_id"]
-            video_url = t["video_url"]
-            styles = t.get("styles", pipeline.ALL_STYLES)
-            
-            progress_bar.progress(idx / len(tasks_data), text=f"Processing task {task_id} ({idx+1}/{len(tasks_data)})...")
-            
-            status_text.write(f"⏳ Downloading video for task `{task_id}`...")
-            with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
-                tmp_path = tmp.name
-                try:
-                    res = requests.get(video_url, stream=True, timeout=300)
-                    res.raise_for_status()
-                    for chunk in res.iter_content(chunk_size=8192):
-                        tmp.write(chunk)
-                except Exception as e:
-                    st.error(f"❌ Failed to download video from {video_url}: {e}")
-                    continue
-            
-            status_text.write(f"🧠 Running cascade pipeline for task `{task_id}`...")
-            try:
-                def on_progress(step, detail="", progress=0):
-                    status_text.write(f"⚙️ Task `{task_id}`: [{progress*100:.0f}%] {step}: {detail}")
-                
-                run_res = pipeline.run_full_pipeline(
-                    video_path=tmp_path,
-                    styles=styles,
-                    eval_threshold=batch_eval_threshold,
-                    max_correction_rounds=batch_max_rounds,
-                    on_progress=on_progress,
-                )
-                
-                captions_out = {s: run_res["captions"].get(s, "") for s in styles}
-                results_json_output.append({
-                    "task_id": task_id,
-                    "captions": captions_out
-                })
-                
-                with open(tmp_path, "rb") as vf:
-                    vid_bytes = vf.read()
-                
-                batch_results.append({
-                    "task_id": task_id,
-                    "video_url": video_url,
-                    "video_bytes": vid_bytes,
-                    "results": run_res
-                })
-            except Exception as e:
-                st.error(f"❌ Pipeline failed for task `{task_id}`: {e}")
-            finally:
-                try:
-                    os.unlink(tmp_path)
-                except OSError:
-                    pass
-                    
-        progress_bar.progress(1.0, text="Batch processing complete!")
-        status_text.write("💾 Saving results.json...")
-        
-        output_dir = Path("/output")
-        if not output_dir.exists():
-            output_dir = Path("output")
-        output_dir.mkdir(parents=True, exist_ok=True)
-        results_path = output_dir / "results.json"
-        with open(results_path, "w", encoding="utf-8") as f:
-            json.dump(results_json_output, f, indent=2, ensure_ascii=False)
-            
-        st.session_state.tasks_results = batch_results
-        st.session_state.results_json_data = json.dumps(results_json_output, indent=2, ensure_ascii=False)
-        st.toast("🎉 Batch completed successfully!", icon="✅")
-        
-        st.session_state.pipeline_running = False
-        st.session_state.pipeline_args = {}
-        st.rerun()
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# ── Sidebar (Caption & Video History) ─────────────────────────
-with st.sidebar:
-    st.markdown('<h3 style="font-family:\'Outfit\'; margin-top: 0; color: #eeeef2;">📋 Caption History</h3>', unsafe_allow_html=True)
-    st.markdown('<p style="font-size:0.8rem; color:#7a7a95; margin-bottom: 1.5rem;">Select a past run to restore its results and video state.</p>', unsafe_allow_html=True)
-    
-    if st.session_state.history:
-        for i, item in enumerate(reversed(st.session_state.history)):
-            st.markdown(f"""
-            <div style="background: rgba(255, 255, 255, 0.015); border: 1px solid rgba(255, 255, 255, 0.04); border-radius: 12px; padding: 0.8rem 1rem; margin-bottom: 0.75rem;">
-                <div style="font-weight: 700; font-size: 0.88rem; color: #eeeef2; line-height: 1.25; word-break: break-all;">{item['filename']}</div>
-                <div style="font-size: 0.7rem; color: #7a7a95; font-family: 'JetBrains Mono', monospace; margin-top: 0.25rem;">{item['timestamp']}</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            if st.button("👁️ View Run", key=f"load_sidebar_hist_{i}", use_container_width=True, help="Load this run"):
-                st.session_state.results = item["results"]
-                st.session_state.video_bytes = item["video_bytes"]
-                st.rerun()
-            st.markdown("<hr style='border:0; height:1px; background:rgba(255,255,255,0.05); margin:0.8rem 0;' />", unsafe_allow_html=True)
-            
-        st.markdown("")
-        if st.button("🗑️ Clear History", key="clear_history_sidebar", use_container_width=True):
-            st.session_state.history = []
-            st.session_state.results = None
-            st.session_state.video_bytes = None
-            st.toast("History cleared", icon="🗑️")
-            st.rerun()
-    else:
-        st.caption("No caption runs found in this session.")
-
-
-# ── Upload Section ────────────────────────────────────────────
-if st.session_state.results is None and not st.session_state.tasks_results:
-    st.markdown("")
-    col_pad_l, col_upload, col_pad_r = st.columns([1, 4, 1])
-    with col_upload:
-        upload_tab_single, upload_tab_batch = st.tabs(["🎥 Single Video Upload", "📋 tasks.json Batch Mode"])
-        
-        with upload_tab_single:
-            uploaded_file = st.file_uploader(
-                "📤 Upload your video clip (MP4, 30s–2min)",
-                type=["mp4"],
-                help="Drag and drop or click to browse. Max ~500MB.",
-                key="video_uploader",
-            )
-
-            if uploaded_file is not None:
-                # Show video preview
-                st.video(uploaded_file)
-
-                # Config columns
-                c1, c2 = st.columns(2)
-                with c1:
-                    eval_threshold = st.slider(
-                        "Eval Threshold", 0.8, 1.0, 0.8, 0.05,
-                        help="Captions scoring below this are re-generated (minimum 0.8/80%)"
-                    )
-                with c2:
-                    max_rounds = st.slider(
-                        "Max Correction Rounds", 1, 5, 3,
-                        help="Max self-correction attempts per caption"
-                    )
-
-                if st.button("🚀 Generate Captions", type="primary", use_container_width=True):
-                    st.session_state.pipeline_running = True
-                    st.session_state.pipeline_args = {
-                        "mode": "single",
-                        "video_bytes": uploaded_file.getvalue(),
-                        "filename": uploaded_file.name,
-                        "threshold": eval_threshold,
-                        "max_rounds": max_rounds
-                    }
-                    st.rerun()
-
-        with upload_tab_batch:
-            tasks_file = st.file_uploader(
-                "📥 Upload tasks.json file",
-                type=["json"],
-                help="Upload the hackathon evaluation tasks file.",
-                key="tasks_uploader",
-            )
-            
-            if tasks_file is not None:
-                try:
-                    tasks_data = json.loads(tasks_file.getvalue().decode('utf-8'))
-                    st.success(f"Successfully loaded {len(tasks_data)} task(s) from JSON.")
-                    
-                    # Display preview of tasks in an expander
-                    with st.expander("🔍 View Tasks Detail", expanded=True):
-                        for i, t in enumerate(tasks_data):
-                            st.markdown(f"**Task #{i+1}: {t.get('task_id', 'unknown')}**")
-                            st.markdown(f"- Video URL: `{t.get('video_url', '')}`")
-                            st.markdown(f"- Requested Styles: `{', '.join(t.get('styles', []))}`")
-                    
-                    # Save to input/tasks.json
-                    input_dir = Path("/input")
-                    if not input_dir.exists():
-                        input_dir = Path("input")
-                    input_dir.mkdir(parents=True, exist_ok=True)
-                    tasks_path = input_dir / "tasks.json"
-                    with open(tasks_path, "w", encoding="utf-8") as f:
-                        json.dump(tasks_data, f, indent=2, ensure_ascii=False)
-                    
-                    # Settings for processing
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        batch_eval_threshold = st.slider(
-                            "Eval Threshold (Batch)", 0.8, 1.0, 0.8, 0.05,
-                            help="Captions scoring below this are re-generated (minimum 0.8/80%)",
-                            key="batch_eval_threshold_slider"
-                        )
-                    with c2:
-                        batch_max_rounds = st.slider(
-                            "Max Correction Rounds (Batch)", 1, 5, 3,
-                            help="Max self-correction attempts per caption",
-                            key="batch_max_rounds_slider"
-                        )
-                    
-                    if st.button("🚀 Process Batch Tasks", type="primary", use_container_width=True):
-                        st.session_state.pipeline_running = True
-                        st.session_state.pipeline_args = {
-                            "mode": "batch",
-                            "tasks_data": tasks_data,
-                            "threshold": batch_eval_threshold,
-                            "max_rounds": batch_max_rounds
-                        }
-                        st.rerun()
-                        
-                except Exception as e:
-                    st.error(f"Error parsing tasks.json: {e}")
-
-
-# ── Batch Results Section ─────────────────────────────────────
-if st.session_state.tasks_results:
-    st.markdown("### 📋 Batch Process Results")
-    
-    # Header download and back buttons
-    c_back, c_dl = st.columns([1, 2])
-    with c_back:
-        if st.button("🔄 Process Another Batch", type="secondary", use_container_width=True):
-            st.session_state.tasks_results = None
-            st.session_state.results_json_data = None
-            st.rerun()
-            
-    with c_dl:
-        st.download_button(
-            label="📥 Download results.json",
-            data=st.session_state.results_json_data,
-            file_name="results.json",
-            mime="application/json",
-            use_container_width=True,
-            type="primary"
-        )
-        
-    st.divider()
-    
-    # Render tabs for each task result
-    task_tabs = st.tabs([f"Task: {tr['task_id']}" for tr in st.session_state.tasks_results])
-    
-    for idx, tr in enumerate(st.session_state.tasks_results):
-        with task_tabs[idx]:
-            task_id = tr["task_id"]
-            video_url = tr["video_url"]
-            vid_bytes = tr["video_bytes"]
-            run_res = tr["results"]
-            
-            st.markdown(f"#### 🎬 Task Detail: `{task_id}`")
-            st.caption(f"Video Source: {video_url}")
-            
-            # Display captions compare mode or tab mode
-            col_vid, col_cap = st.columns([1, 1], gap="medium")
-            with col_vid:
-                if vid_bytes:
-                    st.video(vid_bytes)
-                else:
-                    st.video(video_url)
-                    
-            with col_cap:
-                st.markdown("##### 📝 Generated Captions")
-                for sk, meta in STYLE_META.items():
-                    caption_text = run_res["captions"].get(sk)
-                    if caption_text:
-                        st.markdown(f"**{meta['emoji']} {meta['label']}**")
-                        st.markdown(f"""
-                        <div class="caption-card caption-{meta['css']}">
-                            {caption_text}
-                        </div>
-                        """, unsafe_allow_html=True)
-                        st.markdown("")
-                        
-            st.divider()
-            
-            # Show evaluation and timeline for this task
-            col_eval1, col_eval2 = st.columns(2)
-            with col_eval1:
-                # Plotly radar chart
-                t_scores = run_res.get("scores", {})
-                scores_for_chart = {}
-                for k, v in t_scores.items():
-                    if isinstance(v, dict):
-                        scores_for_chart[k] = v
-                    elif hasattr(v, 'accuracy'):
-                        scores_for_chart[k] = {"accuracy": v.accuracy, "style_match": v.style_match}
-                if scores_for_chart:
-                    fig = build_radar_chart(scores_for_chart)
-                    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False}, key=f"radar_batch_{task_id}")
-                    
-            with col_eval2:
-                st.markdown("##### 📊 Evaluation Scores")
-                for sk, meta in STYLE_META.items():
-                    if sk in t_scores:
-                        s = t_scores[sk]
-                        acc = s.get("accuracy", 0) if isinstance(s, dict) else getattr(s, 'accuracy', 0)
-                        sty = s.get("style_match", 0) if isinstance(s, dict) else getattr(s, 'style_match', 0)
-                        st.markdown(f"**{meta['emoji']} {meta['label']}**")
-                        render_score_bar("Accuracy", acc, get_score_class(acc))
-                        render_score_bar("Style Match", sty, get_score_class(sty))
-                        st.markdown("")
-                        
-            # Timeline if correction rounds exist
-            t_history = run_res.get("correction_history", [])
-            if t_history:
-                with st.expander(f"🔄 Self-Correction Timeline ({len(t_history)} rounds)"):
-                    for round_idx, round_data in enumerate(t_history):
-                        is_pass = round_data.get("passed", False)
-                        round_num = round_data.get("round", round_idx + 1)
-                        detail = round_data.get("detail", "")
-                        st.markdown(f"**{'✅' if is_pass else '🔄'} Round {round_num} — {'Passed' if is_pass else 'Refinement Active'}**")
-                        if detail:
-                            st.write(detail)
-
-
-# ── Results Section ───────────────────────────────────────────
-if st.session_state.results is not None:
-    results = st.session_state.results
+def render_run_results(results, video_bytes=None, video_url=None, key_suffix=""):
+    """Modular function to render the full pipeline results visualization."""
     captions = results.get("captions", {})
     scores = results.get("scores", {})
     initial_scores = results.get("initial_scores", {})
@@ -1066,31 +641,24 @@ if st.session_state.results is not None:
     thumbnails = results.get("thumbnails", [])
     raw_insights = results.get("raw_insights", "")
 
-    # Clean action layout
-    c_back, c_space = st.columns([1, 4])
-    with c_back:
-        if st.button("🔄 Analyze Another Video", type="secondary"):
-            st.session_state.results = None
-            st.session_state.video_bytes = None
-            st.rerun()
-
-    st.divider()
-
     # ── Video + Captions ──────────────────────────────────────
     st.markdown("### 📝 Styled Captions")
 
     view_mode = st.radio(
         "Display Mode",
         ["🃏 Cards Mode", "📊 Compare All Modes"],
-        horizontal=True, label_visibility="collapsed"
+        horizontal=True, label_visibility="collapsed",
+        key=f"view_mode_{key_suffix}"
     )
 
     if "Cards" in view_mode:
         col_video, col_captions = st.columns([1, 1], gap="medium")
 
         with col_video:
-            if st.session_state.video_bytes:
-                st.video(st.session_state.video_bytes)
+            if video_bytes:
+                st.video(video_bytes)
+            elif video_url:
+                st.video(video_url)
 
         with col_captions:
             tabs = st.tabs([f"{m['emoji']} {m['label']}" for m in STYLE_META.values()])
@@ -1175,7 +743,7 @@ if st.session_state.results is not None:
 
         if scores_for_chart:
             fig = build_radar_chart(scores_for_chart)
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False}, key=f"radar_chart_{key_suffix}")
 
     with eval_col2:
         st.markdown("##### Score Breakdown")
@@ -1226,7 +794,7 @@ if st.session_state.results is not None:
     st.divider()
 
     # ── Raw Insights (Collapsible) ────────────────────────────
-    with st.expander("🧠 Raw Perception Output"):
+    with st.expander("🧠 Raw Perception Output", expanded=False):
         st.text(raw_insights if raw_insights else "No raw insights available.")
 
     st.divider()
@@ -1256,9 +824,10 @@ if st.session_state.results is not None:
         st.download_button(
             "💾 Download JSON",
             data=json.dumps(export_data, indent=2, default=str),
-            file_name="rambler_results.json",
+            file_name=f"rambler_results_{key_suffix}.json" if key_suffix else "rambler_results.json",
             mime="application/json",
             use_container_width=True,
+            key=f"dl_json_{key_suffix}"
         )
 
     with export_cols[1]:
@@ -1270,19 +839,466 @@ if st.session_state.results is not None:
         st.download_button(
             "📋 Download Captions (TXT)",
             data=all_text,
-            file_name="rambler_captions.txt",
+            file_name=f"rambler_captions_{key_suffix}.txt" if key_suffix else "rambler_captions.txt",
             mime="text/plain",
             use_container_width=True,
+            key=f"dl_txt_{key_suffix}"
         )
 
     with export_cols[2]:
         st.download_button(
             "📊 Download Scores (JSON)",
             data=json.dumps(export_data["scores"], indent=2, default=str),
-            file_name="rambler_scores.json",
+            file_name=f"rambler_scores_{key_suffix}.json" if key_suffix else "rambler_scores.json",
             mime="application/json",
             use_container_width=True,
+            key=f"dl_scores_{key_suffix}"
         )
+
+
+
+# ── Header (AMD Dynamic Logo Layout) ──────────────────────────
+if logo_b64:
+    header_html = f"""
+    <div class="hero-header">
+        <div class="hero-brand-container">
+            <img class="hero-logo-img" src="data:image/png;base64,{logo_b64}" />
+            <div class="hero-title" style="color: #ed1c24; background: none; -webkit-text-fill-color: initial;">Rambler</div>
+        </div>
+        <div class="hero-subtitle">AI Video Captioning Agent · Multi-Model Gemma Cascade</div>
+        <div class="hero-team"><strong>Omnix</strong> · Abdelrahman Amr Ahmed Abdullah · AMD Hackathon Track 2</div>
+    </div>
+    """
+else:
+    header_html = """
+    <div class="hero-header">
+        <div class="hero-brand-container">
+            <div class="hero-title" style="color: #ed1c24; background: none; -webkit-text-fill-color: initial;">🎬 Rambler</div>
+        </div>
+        <div class="hero-subtitle">AI Video Captioning Agent · Multi-Model Gemma Cascade</div>
+        <div class="hero-team"><strong>Omnix</strong> · Abdelrahman Amr Ahmed Abdullah · AMD Hackathon Track 2</div>
+    </div>
+    """
+st.markdown(header_html, unsafe_allow_html=True)
+
+# ── Sidebar (Caption & Video History) ─────────────────────────
+with st.sidebar:
+    st.markdown('<h3 style="font-family:\'Outfit\'; margin-top: 0; color: #eeeef2;">📋 Caption History</h3>', unsafe_allow_html=True)
+    st.markdown('<p style="font-size:0.8rem; color:#7a7a95; margin-bottom: 1.5rem;">Select a past run to restore its results and video state.</p>', unsafe_allow_html=True)
+    
+    if st.session_state.history:
+        for i, item in enumerate(reversed(st.session_state.history)):
+            st.markdown(f"""
+            <div style="background: rgba(255, 255, 255, 0.015); border: 1px solid rgba(255, 255, 255, 0.04); border-radius: 12px; padding: 0.8rem 1rem; margin-bottom: 0.75rem;">
+                <div style="font-weight: 700; font-size: 0.88rem; color: #eeeef2; line-height: 1.25; word-break: break-all;">{item['filename']}</div>
+                <div style="font-size: 0.7rem; color: #7a7a95; font-family: 'JetBrains Mono', monospace; margin-top: 0.25rem;">{item['timestamp']}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            if st.button("👁️ View Run", key=f"load_sidebar_hist_{i}", use_container_width=True, help="Load this run"):
+                st.session_state.results = item["results"]
+                st.session_state.video_bytes = item["video_bytes"]
+                st.rerun()
+            st.markdown("<hr style='border:0; height:1px; background:rgba(255,255,255,0.05); margin:0.8rem 0;' />", unsafe_allow_html=True)
+            
+        st.markdown("")
+        if st.button("🗑️ Clear History", key="clear_history_sidebar", use_container_width=True):
+            st.session_state.history = []
+            st.session_state.results = None
+            st.session_state.video_bytes = None
+            st.toast("History cleared", icon="🗑️")
+            st.rerun()
+    else:
+        st.caption("No caption runs found in this session.")
+
+
+# ── Upload Section ────────────────────────────────────────────
+if st.session_state.results is None and st.session_state.tasks_results is None:
+    st.markdown("")
+    col_pad_l, col_upload, col_pad_r = st.columns([1, 4, 1])
+    with col_upload:
+        upload_tab_single, upload_tab_batch = st.tabs(["🎥 Single Video Upload", "📋 tasks.json Batch Mode"])
+        
+        with upload_tab_single:
+            uploaded_file = st.file_uploader(
+                "📤 Upload your video clip (MP4, 30s–2min)",
+                type=["mp4"],
+                help="Drag and drop or click to browse. Max ~500MB.",
+                key="video_uploader",
+            )
+
+            if uploaded_file is not None:
+                # Show video preview
+                st.video(uploaded_file)
+
+                # Config columns
+                c1, c2 = st.columns(2)
+                with c1:
+                    eval_threshold = st.slider(
+                        "Eval Threshold", 0.8, 1.0, 0.8, 0.05,
+                        help="Captions scoring below this are re-generated (minimum 0.8/80%)"
+                    )
+                with c2:
+                    max_rounds = st.slider(
+                        "Max Correction Rounds", 1, 5, 3,
+                        help="Max self-correction attempts per caption"
+                    )
+
+                if st.button("🚀 Generate Captions", type="primary", use_container_width=True):
+                    # Save video to temp file
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+                        tmp.write(uploaded_file.getvalue())
+                        tmp_path = tmp.name
+
+                    st.session_state.video_bytes = uploaded_file.getvalue()
+
+                    # Run pipeline with progress
+                    progress_bar = st.progress(0, text="Initializing pipeline...")
+
+                    # Pipeline step display
+                    step_cols = st.columns(len(PIPELINE_STEPS))
+                    step_placeholders = []
+                    for i, (icon, label) in enumerate(PIPELINE_STEPS):
+                        with step_cols[i]:
+                            ph = st.empty()
+                            ph.markdown(f'<div class="pipeline-step-box step-pending">{icon}<br>{label}</div>',
+                                        unsafe_allow_html=True)
+                            step_placeholders.append(ph)
+
+                    detail_placeholder = st.empty()
+
+                    current_step_idx = [0]
+
+                    def on_progress(step, detail="", progress=0):
+                        """Callback from pipeline to update Streamlit UI."""
+                        progress_bar.progress(min(progress, 1.0), text=detail)
+
+                        # Update step indicators
+                        step_idx = STEP_KEYS.index(step) if step in STEP_KEYS else current_step_idx[0]
+
+                        for i, (icon, label) in enumerate(PIPELINE_STEPS):
+                            if i < step_idx:
+                                step_placeholders[i].markdown(
+                                    f'<div class="pipeline-step-box step-complete">{icon}<br>{label}</div>',
+                                    unsafe_allow_html=True)
+                            elif i == step_idx:
+                                step_placeholders[i].markdown(
+                                    f'<div class="pipeline-step-box step-active">{icon}<br>{label}</div>',
+                                    unsafe_allow_html=True)
+
+                        current_step_idx[0] = step_idx
+                        detail_placeholder.caption(f"🔄 {detail}")
+
+                    # Run the pipeline
+                    with st.status("⚡ Running Gemma Cascade Pipeline...", expanded=True) as status:
+                        try:
+                            st.write("Starting video analysis...")
+                            results = pipeline.run_pipeline(
+                                video_path=tmp_path,
+                                on_progress=on_progress,
+                                eval_threshold=eval_threshold,
+                                max_correction_rounds=max_rounds,
+                            )
+
+                            st.session_state.results = results
+                            
+                            # Append the full result and video bytes to history list for full loading
+                            st.session_state.history.append({
+                                "filename": uploaded_file.name,
+                                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                                "status": "complete",
+                                "results": results,
+                                "video_bytes": st.session_state.video_bytes
+                            })
+
+                            status.update(label="✅ Pipeline Complete!", state="complete")
+                            st.toast("🎉 Captions generated successfully!", icon="✅")
+                            time.sleep(1)
+                            st.rerun()
+
+                        except Exception as e:
+                            status.update(label=f"❌ Error: {str(e)[:100]}", state="error")
+                            st.error(f"Pipeline failed: {str(e)}")
+                            st.session_state.history.append({
+                                "filename": uploaded_file.name,
+                                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                                "status": "error",
+                                "results": None,
+                                "video_bytes": None
+                            })
+
+                        finally:
+                            # Clean up temp file
+                            try:
+                                os.unlink(tmp_path)
+                            except OSError:
+                                pass
+
+        with upload_tab_batch:
+            tasks_file = st.file_uploader(
+                "📥 Upload tasks.json file",
+                type=["json"],
+                help="Upload the hackathon evaluation tasks file.",
+                key="tasks_uploader",
+            )
+            
+            if tasks_file is not None:
+                try:
+                    tasks_data = json.loads(tasks_file.getvalue().decode('utf-8'))
+                    st.success(f"Successfully loaded {len(tasks_data)} task(s) from JSON.")
+                    
+                    # Display preview of tasks in an expander
+                    with st.expander("🔍 View Tasks Detail", expanded=True):
+                        for i, t in enumerate(tasks_data):
+                            st.markdown(f"**Task #{i+1}: {t.get('task_id', 'unknown')}**")
+                            st.markdown(f"- Video URL: `{t.get('video_url', '')}`")
+                            st.markdown(f"- Requested Styles: `{', '.join(t.get('styles', []))}`")
+                    
+                    # Save to input/tasks.json
+                    input_dir = Path("/input")
+                    if not input_dir.exists():
+                        input_dir = Path("input")
+                    input_dir.mkdir(parents=True, exist_ok=True)
+                    tasks_path = input_dir / "tasks.json"
+                    with open(tasks_path, "w", encoding="utf-8") as f:
+                        json.dump(tasks_data, f, indent=2, ensure_ascii=False)
+                    
+                    # Settings for processing
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        batch_eval_threshold = st.slider(
+                            "Eval Threshold (Batch)", 0.8, 1.0, 0.8, 0.05,
+                            help="Captions scoring below this are re-generated (minimum 0.8/80%)",
+                            key="batch_eval_threshold_slider"
+                        )
+                    with c2:
+                        batch_max_rounds = st.slider(
+                            "Max Correction Rounds (Batch)", 1, 5, 3,
+                            help="Max self-correction attempts per caption",
+                            key="batch_max_rounds_slider"
+                        )
+                    
+                    if st.button("🚀 Process Batch Tasks", type="primary", use_container_width=True):
+                        # Run the batch process
+                        progress_bar = st.progress(0, text="Starting batch process...")
+                        
+                        batch_results = []
+                        results_json_output = []
+                        
+                        import requests
+                        for idx, t in enumerate(tasks_data):
+                            task_id = t["task_id"]
+                            video_url = t["video_url"]
+                            styles = t.get("styles", pipeline.ALL_STYLES)
+                            
+                            progress_bar.progress(idx / len(tasks_data), text=f"Processing task {task_id} ({idx+1}/{len(tasks_data)})...")
+                            
+                            with st.status(f"⚡ Processing Task `{task_id}`...", expanded=True) as status:
+                                status.write(f"⏳ Downloading video from {video_url}...")
+                                with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+                                    tmp_path = tmp.name
+                                    try:
+                                        res = requests.get(video_url, stream=True, timeout=300)
+                                        res.raise_for_status()
+                                        for chunk in res.iter_content(chunk_size=8192):
+                                            tmp.write(chunk)
+                                    except Exception as e:
+                                        status.update(label=f"❌ Error: Task `{task_id}` Download Failed", state="error")
+                                        st.error(f"Download failed: {str(e)}")
+                                        batch_results.append({
+                                            "task_id": task_id,
+                                            "video_url": video_url,
+                                            "video_bytes": None,
+                                            "error": f"Download failed: {e}",
+                                            "results": None
+                                        })
+                                        continue
+                                
+                                # Run pipeline
+                                status.write("🧠 Running cascade pipeline...")
+                                try:
+                                    def on_progress(step, detail="", progress=0):
+                                        status.write(f"⚙️ [{progress*100:.0f}%] {step}: {detail}")
+                                    
+                                    run_res = pipeline.run_full_pipeline(
+                                        video_path=tmp_path,
+                                        styles=styles,
+                                        eval_threshold=batch_eval_threshold,
+                                        max_correction_rounds=batch_max_rounds,
+                                        on_progress=on_progress,
+                                    )
+                                    
+                                    # Format for results.json
+                                    captions_out = {s: run_res["captions"].get(s, "") for s in styles}
+                                    results_json_output.append({
+                                        "task_id": task_id,
+                                        "captions": captions_out
+                                    })
+                                    
+                                    # Read video bytes for Streamlit playback
+                                    with open(tmp_path, "rb") as vf:
+                                        vid_bytes = vf.read()
+                                    
+                                    # Keep full result metadata for display
+                                    batch_results.append({
+                                        "task_id": task_id,
+                                        "video_url": video_url,
+                                        "video_bytes": vid_bytes,
+                                        "results": run_res
+                                    })
+                                    status.update(label=f"✅ Task `{task_id}` Complete!", state="complete")
+                                except Exception as e:
+                                    status.update(label=f"❌ Error: Task `{task_id}` Pipeline Failed", state="error")
+                                    st.error(f"Pipeline failed: {str(e)}")
+                                    batch_results.append({
+                                        "task_id": task_id,
+                                        "video_url": video_url,
+                                        "video_bytes": None,
+                                        "error": f"Pipeline failed: {e}",
+                                        "results": None
+                                    })
+                                finally:
+                                    try:
+                                        os.unlink(tmp_path)
+                                    except OSError:
+                                        pass
+                        
+                        progress_bar.progress(1.0, text="Batch processing complete!")
+                        
+                        # Save to /output/results.json (or output/results.json)
+                        output_dir = Path("/output")
+                        if not output_dir.exists():
+                            output_dir = Path("output")
+                        output_dir.mkdir(parents=True, exist_ok=True)
+                        results_path = output_dir / "results.json"
+                        with open(results_path, "w", encoding="utf-8") as f:
+                            json.dump(results_json_output, f, indent=2, ensure_ascii=False)
+                        
+                        # Save in session state for UI display
+                        st.session_state.tasks_results = batch_results
+                        st.session_state.results_json_data = json.dumps(results_json_output, indent=2, ensure_ascii=False)
+                        st.toast("🎉 Batch completed successfully!", icon="✅")
+                        st.rerun()
+                        
+                except Exception as e:
+                    st.error(f"Error parsing tasks.json: {e}")
+
+
+# ── Batch Results Section ─────────────────────────────────────
+if st.session_state.tasks_results:
+    st.markdown("### 📋 Batch Process Results")
+    
+    # Dashboard metrics row
+    total_tasks = len(st.session_state.tasks_results)
+    successful_tasks = sum(1 for tr in st.session_state.tasks_results if not tr.get("error"))
+    
+    # Calculate average scores
+    total_acc = 0.0
+    total_sty = 0.0
+    score_count = 0
+    for tr in st.session_state.tasks_results:
+        if not tr.get("error") and tr.get("results"):
+            t_scores = tr["results"].get("scores", {})
+            for sk, s in t_scores.items():
+                acc = s.get("accuracy", 0) if isinstance(s, dict) else getattr(s, 'accuracy', 0)
+                sty = s.get("style_match", 0) if isinstance(s, dict) else getattr(s, 'style_match', 0)
+                total_acc += acc
+                total_sty += sty
+                score_count += 1
+                
+    avg_acc = (total_acc / score_count) if score_count > 0 else 0.0
+    avg_sty = (total_sty / score_count) if score_count > 0 else 0.0
+    success_rate = (successful_tasks / total_tasks * 100) if total_tasks > 0 else 0.0
+    
+    # Render dashboard metrics in custom cards
+    st.markdown("#### 📊 Evaluation Summary Dashboard")
+    m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+    with m_col1:
+        st.markdown(f"""
+        <div class="metric-card style-border-formal" style="margin-bottom: 1.25rem;">
+            <h4 style="margin:0; color:#448aff;">📁 Total Tasks</h4>
+            <h2 style="margin:5px 0 0 0; color:#eeeef2;">{total_tasks}</h2>
+        </div>
+        """, unsafe_allow_html=True)
+    with m_col2:
+        st.markdown(f"""
+        <div class="metric-card style-border-sarcastic" style="margin-bottom: 1.25rem;">
+            <h4 style="margin:0; color:#b388ff;">✅ Successful</h4>
+            <h2 style="margin:5px 0 0 0; color:#eeeef2;">{successful_tasks} <span style="font-size:0.8rem; color:#7a7a95;">/ {total_tasks}</span></h2>
+        </div>
+        """, unsafe_allow_html=True)
+    with m_col3:
+        st.markdown(f"""
+        <div class="metric-card style-border-tech" style="margin-bottom: 1.25rem;">
+            <h4 style="margin:0; color:#00e676;">🎯 Avg Accuracy</h4>
+            <h2 style="margin:5px 0 0 0; color:#eeeef2;">{avg_acc:.2f} <span style="font-size:0.8rem; color:#7a7a95;">(80% min)</span></h2>
+        </div>
+        """, unsafe_allow_html=True)
+    with m_col4:
+        st.markdown(f"""
+        <div class="metric-card style-border-fun" style="margin-bottom: 1.25rem;">
+            <h4 style="margin:0; color:#ff6b35;">📈 Success Rate</h4>
+            <h2 style="margin:5px 0 0 0; color:#eeeef2;">{success_rate:.1f}%</h2>
+        </div>
+        """, unsafe_allow_html=True)
+        
+    st.markdown("<br/>", unsafe_allow_html=True)
+    
+    # Header download and back buttons
+    c_back, c_dl = st.columns([1, 2])
+    with c_back:
+        if st.button("🔄 Process Another Batch", type="secondary", use_container_width=True):
+            st.session_state.tasks_results = None
+            st.session_state.results_json_data = None
+            st.rerun()
+            
+    with c_dl:
+        st.download_button(
+            label="📥 Download results.json",
+            data=st.session_state.results_json_data,
+            file_name="results.json",
+            mime="application/json",
+            use_container_width=True,
+            type="primary"
+        )
+        
+    st.divider()
+    
+    # Render tabs for each task result
+    task_tabs = st.tabs([f"Task: {tr['task_id']}" for tr in st.session_state.tasks_results])
+    
+    for idx, tr in enumerate(st.session_state.tasks_results):
+        with task_tabs[idx]:
+            task_id = tr["task_id"]
+            video_url = tr["video_url"]
+            vid_bytes = tr["video_bytes"]
+            run_res = tr["results"]
+            
+            st.markdown(f"#### 🎬 Task Detail: `{task_id}`")
+            st.caption(f"Video Source: {video_url}")
+            st.markdown("")
+            
+            if tr.get("error"):
+                st.error(f"❌ Processing failed for this task: {tr['error']}")
+            else:
+                render_run_results(run_res, video_bytes=vid_bytes, key_suffix=f"task_{task_id}")
+
+
+# ── Results Section ───────────────────────────────────────────
+if st.session_state.results is not None:
+    results = st.session_state.results
+    
+    # Clean action layout
+    c_back, c_space = st.columns([1, 4])
+    with c_back:
+        if st.button("🔄 Analyze Another Video", type="secondary"):
+            st.session_state.results = None
+            st.session_state.video_bytes = None
+            st.rerun()
+
+    st.divider()
+
+    render_run_results(results, video_bytes=st.session_state.video_bytes, key_suffix="single_run")
 
 
 # ── Footer ────────────────────────────────────────────────────
