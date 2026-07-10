@@ -45,3 +45,6 @@ rambler_2.0.ipynb
 
 # Old Flask Server
 server.py
+
+docs/generate_deck.py
+docs/generate_cover.py
