@@ -23,14 +23,17 @@ INFERENCE_BACKEND = os.environ.get("INFERENCE_BACKEND", "fireworks")  # "firewor
 if INFERENCE_BACKEND == "local":
     # Local vLLM on AMD GPU (ROCm) — free, no API key needed
     FIREWORKS_API_KEY = "not-needed"
-    FIREWORKS_API_URL = os.environ.get("LOCAL_API_URL", "http://localhost:8080/v1/chat/completions")
+    PERCEPTION_API_URL = os.environ.get("LOCAL_API_URL", "http://localhost:8080/v1/chat/completions")
+    # Route styling and evaluation to LOCAL_API_URL_2 if provided, otherwise fallback to LOCAL_API_URL (Option A)
+    STYLING_API_URL = os.environ.get("LOCAL_API_URL_2", PERCEPTION_API_URL)
     PERCEPTION_MODEL = os.environ.get("PERCEPTION_MODEL", "google/gemma-4-31b-it")
     STYLING_MODEL    = os.environ.get("STYLING_MODEL",    "google/gemma-4-31b-it")
     EVAL_MODEL       = os.environ.get("EVAL_MODEL",       "google/gemma-4-31b-it")
 else:
     # Fireworks AI Cloud API
     FIREWORKS_API_KEY = os.environ.get("FIREWORKS_API_KEY", "")
-    FIREWORKS_API_URL = "https://api.fireworks.ai/inference/v1/chat/completions"
+    PERCEPTION_API_URL = "https://api.fireworks.ai/inference/v1/chat/completions"
+    STYLING_API_URL = PERCEPTION_API_URL
     PERCEPTION_MODEL = os.environ.get("PERCEPTION_MODEL", "accounts/fireworks/models/gemma-4-31b-it")
     STYLING_MODEL    = os.environ.get("STYLING_MODEL",    "accounts/fireworks/models/gemma-4-26b-a4b-it")
     EVAL_MODEL       = os.environ.get("EVAL_MODEL",       "accounts/fireworks/models/gemma-4-26b-a4b-it")
@@ -310,7 +313,7 @@ def analyze_video(payload: dict) -> str:
     }
 
     response = requests.post(
-        FIREWORKS_API_URL,
+        PERCEPTION_API_URL,
         headers=headers,
         json=payload,
         timeout=300
@@ -395,7 +398,7 @@ def structure_output(raw_insights: str, styles: List[str] = None, max_retries: i
         }
 
         response = requests.post(
-            FIREWORKS_API_URL,
+            STYLING_API_URL,
             headers=headers,
             json=payload,
             timeout=120
@@ -492,7 +495,7 @@ def gemma_eval(captions: dict, raw_insights: str) -> dict:
 
     try:
         response = requests.post(
-            FIREWORKS_API_URL,
+            STYLING_API_URL,
             headers=headers,
             json=payload,
             timeout=60
@@ -631,7 +634,7 @@ def self_correct(
 
             try:
                 response = requests.post(
-                    FIREWORKS_API_URL,
+                    STYLING_API_URL,
                     headers=headers,
                     json=payload,
                     timeout=60
