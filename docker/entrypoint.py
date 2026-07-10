@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Rambler 3.0 — Headless Docker Entrypoint
+Rambler — Headless Docker Entrypoint
 Team Omnix | AMD Hackathon Track 2
 
 Reads /input/tasks.json, processes each video, writes /output/results.json.
@@ -90,7 +90,7 @@ def process_task(task: dict) -> dict:
 
 
 def main():
-    print("\n🎬 Rambler 3.0 — Team Omnix")
+    print("\n🎬 Rambler — Team Omnix")
     print("AMD Hackathon Track 2: Video Captioning Agent")
     print(f"API Key: {'✅' if pipeline.FIREWORKS_API_KEY else '❌ NOT SET'}")
 

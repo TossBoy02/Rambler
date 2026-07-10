@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Rambler 3.0 — Unified Docker Launcher
+Rambler — Unified Docker Launcher
 Team Omnix | AMD Hackathon Track 2
 
 Detects the presence of /input/tasks.json (headless evaluation mode)

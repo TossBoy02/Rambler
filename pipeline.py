@@ -1,5 +1,5 @@
 # ============================================================
-# Rambler 3.0 — Core Pipeline Module
+# Rambler — Core Pipeline Module
 # Team Omnix | AMD Hackathon Track 2: Video Captioning Agent
 # Powered by Gemma via Fireworks AI
 # ============================================================
@@ -665,7 +665,7 @@ def run_full_pipeline(
     max_correction_rounds: int = 3,
 ) -> dict:
     """
-    Run the complete Rambler 3.0 pipeline.
+    Run the complete Rambler pipeline.
 
     Returns dict with:
         - captions: {style: caption_text}

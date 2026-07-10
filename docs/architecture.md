@@ -1,6 +1,6 @@
-# 🎬 Rambler 3.0 — Architecture Diagram
+# 🎬 Rambler — Architecture Diagram
 
-This document provides a visual representation of the Rambler 3.0 pipeline and deployment architectures.
+This document provides a visual representation of the Rambler pipeline and deployment architectures.
 
 ---
 
@@ -102,11 +102,11 @@ sequenceDiagram
 
 ## 3. Hybrid Deployment Setup
 
-Rambler 3.0 dynamically routes inference requests based on the configured environment.
+Rambler dynamically routes inference requests based on the configured environment.
 
 ```
                   ┌───────────────────────────────┐
-                  │      Rambler 3.0 App         │
+                  │        Rambler App            │
                   └──────────────┬────────────────┘
                                  │
                    Reads INFERENCE_BACKEND env

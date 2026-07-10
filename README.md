@@ -1,4 +1,4 @@
-# 🎬 Rambler 3.0 — AI Video Captioning Agent
+# 🎬 Rambler — AI Video Captioning Agent
 
 **Team Omnix** · Abdelrahman Amr Ahmed Abdullah
 AMD Hackathon Track 2 | Powered by Gemma on AMD ROCm
@@ -13,7 +13,7 @@ AMD Hackathon Track 2 | Powered by Gemma on AMD ROCm
 
 ## Long Description
 
-**Rambler 3.0** is an intelligent video captioning pipeline that goes far beyond simple transcription. Given any short video clip (30s–2min), it performs deep multimodal analysis — extracting visual frames at 1fps, capturing audio waveforms, and synthesizing both modalities through Google's Gemma 4 model family running on AMD Instinct GPUs with ROCm.
+**Rambler** is an intelligent video captioning pipeline that goes far beyond simple transcription. Given any short video clip (30s–2min), it performs deep multimodal analysis — extracting visual frames at 1fps, capturing audio waveforms, and synthesizing both modalities through Google's Gemma 4 model family running on AMD Instinct GPUs with ROCm.
 
 ### The Problem
 
@@ -21,7 +21,7 @@ Existing video captioning tools produce generic, one-size-fits-all descriptions.
 
 ### Our Solution
 
-Rambler 3.0 implements a **three-stage AI pipeline** that mirrors how a human editor would work:
+Rambler implements a **three-stage AI pipeline** that mirrors how a human editor would work:
 
 1. **Perception Stage** (`gemma-4-27b-it`): A multimodal Gemma model ingests sampled video frames and extracted audio simultaneously, producing a comprehensive scene analysis covering visual content, facial micro-expressions, environmental context, vocal qualities, and emotional arcs.
 2. **Styling Stage** (`gemma-4-26b-a4b-it`): A text-optimized Gemma model transforms the raw analysis into four distinct caption styles — **Formal** (BBC-quality narration), **Sarcastic** (dry wit and irony), **Humorous Tech** (programming jokes and Silicon Valley references), and **Humorous Non-Tech** (dad jokes and pop culture references).
