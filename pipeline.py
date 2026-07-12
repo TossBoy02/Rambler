@@ -458,6 +458,20 @@ Be strict and honest. Output ONLY the JSON object.
 """.strip()
 
 
+def _extract_json(text: str) -> str:
+    """Extract JSON from text that may be wrapped in markdown fences."""
+    import re
+    # Try to find JSON in markdown fences
+    match = re.search(r'```(?:json)?\s*\n?(\{.*?\})\s*```', text, re.DOTALL)
+    if match:
+        return match.group(1)
+    # Try to find raw JSON object
+    match = re.search(r'(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})', text, re.DOTALL)
+    if match:
+        return match.group(1)
+    return text.strip()
+
+
 def gemma_eval(captions: dict, raw_insights: str) -> dict:
     """
     Use Gemma to evaluate caption quality.
@@ -479,7 +493,6 @@ def gemma_eval(captions: dict, raw_insights: str) -> dict:
             {"role": "system", "content": EVAL_PROMPT},
             {"role": "user", "content": eval_input}
         ],
-        "response_format": {"type": "json_object"},
         "max_tokens": 512,
         "temperature": 0.2
     }
@@ -489,14 +502,17 @@ def gemma_eval(captions: dict, raw_insights: str) -> dict:
             STYLING_API_URL,
             headers=headers,
             json=payload,
-            timeout=60
+            timeout=120
         )
 
         if response.status_code != 200:
+            print(f"[EVAL] API returned status {response.status_code}: {response.text[:300]}")
             return _default_scores()
 
         result = response.json()
-        scores = json.loads(result["choices"][0]["message"]["content"])
+        raw_content = result["choices"][0]["message"]["content"]
+        json_str = _extract_json(raw_content)
+        scores = json.loads(json_str)
 
         # Validate and normalize scores
         validated = {}
@@ -509,9 +525,12 @@ def gemma_eval(captions: dict, raw_insights: str) -> dict:
             else:
                 validated[style] = {"accuracy": 0.5, "style_match": 0.5}
 
+        scores_summary = {s: f"{v['accuracy']:.2f}/{v['style_match']:.2f}" for s, v in validated.items()}
+        print(f"[EVAL] Scores: {scores_summary}")
         return validated
 
-    except Exception:
+    except Exception as e:
+        print(f"[EVAL] Exception: {e}")
         return _default_scores()
 
 
@@ -530,8 +549,8 @@ You are a creative copywriter. A previous caption for a video was scored poorly.
 {old_caption}
 
 ## Feedback:
-- Accuracy score: {accuracy:.2f}/1.0 — {"needs better factual accuracy" if accuracy < 0.8 else "acceptable"}
-- Style match score: {style_match:.2f}/1.0 — {"needs stronger {style} tone" if style_match < 0.8 else "acceptable"}
+- Accuracy score: {accuracy:.2f}/1.0 — {accuracy_feedback}
+- Style match score: {style_match:.2f}/1.0 — {style_feedback}
 
 ## Your Task:
 Write a BETTER caption in the **{style}** style that:
@@ -594,6 +613,9 @@ def self_correct(
         history.append({
             "round": round_num,
             "failing_styles": failing_styles,
+            "styles_corrected": failing_styles,
+            "detail": f"Re-generated {len(failing_styles)} style(s): {', '.join(failing_styles)}",
+            "passed": False,
             "scores_before": {s: current_scores[s] for s in failing_styles},
         })
 
@@ -605,12 +627,16 @@ def self_correct(
 
         for style in failing_styles:
             s = current_scores[style]
+            accuracy_feedback = "needs better factual accuracy" if s["accuracy"] < 0.8 else "acceptable"
+            style_feedback = f"needs stronger {style} tone" if s["style_match"] < 0.8 else "acceptable"
             regen_prompt = REGEN_PROMPT_TEMPLATE.format(
                 insights=raw_insights[:2000],
                 style=style,
                 old_caption=current_captions[style],
                 accuracy=s["accuracy"],
                 style_match=s["style_match"],
+                accuracy_feedback=accuracy_feedback,
+                style_feedback=style_feedback,
                 style_guide=STYLE_GUIDES[style],
             )
 
@@ -628,7 +654,7 @@ def self_correct(
                     STYLING_API_URL,
                     headers=headers,
                     json=payload,
-                    timeout=60
+                    timeout=120
                 )
                 if response.status_code == 200:
                     result = response.json()
@@ -637,14 +663,23 @@ def self_correct(
                     if new_caption.startswith('"') and new_caption.endswith('"'):
                         new_caption = new_caption[1:-1]
                     current_captions[style] = new_caption
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[SELF-CORRECT] Error re-generating {style}: {e}")
 
         # Re-evaluate
         current_scores = gemma_eval(current_captions, raw_insights)
 
-        # Record scores after correction
+        # Record scores after correction + check if passed
         history[-1]["scores_after"] = {s: current_scores[s] for s in failing_styles}
+        history[-1]["scores"] = dict(current_scores)  # Full scores for UI display
+        
+        # Check if this round passed
+        all_passed = all(
+            current_scores.get(s, {}).get("accuracy", 0) >= threshold and
+            current_scores.get(s, {}).get("style_match", 0) >= threshold
+            for s in ALL_STYLES
+        )
+        history[-1]["passed"] = all_passed
 
     return current_captions, current_scores, history
 

@@ -20,7 +20,8 @@ def download_video(url: str, output_path: str) -> bool:
     """Download a video from URL to local path."""
     try:
         print(f"  ⬇️  Downloading: {url}")
-        response = requests.get(url, stream=True, timeout=300)
+        dl_headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"}
+        response = requests.get(url, stream=True, timeout=300, headers=dl_headers)
         response.raise_for_status()
 
         with open(output_path, 'wb') as f:

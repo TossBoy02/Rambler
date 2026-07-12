@@ -1096,7 +1096,8 @@ if st.session_state.results is None and st.session_state.tasks_results is None:
                                 with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
                                     tmp_path = tmp.name
                                     try:
-                                        res = requests.get(video_url, stream=True, timeout=300)
+                                        dl_headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"}
+                                        res = requests.get(video_url, stream=True, timeout=300, headers=dl_headers)
                                         res.raise_for_status()
                                         for chunk in res.iter_content(chunk_size=8192):
                                             tmp.write(chunk)
@@ -1112,11 +1113,37 @@ if st.session_state.results is None and st.session_state.tasks_results is None:
                                         })
                                         continue
                                 
+                                # Pipeline step display (matching single video mode)
+                                step_cols = st.columns(len(PIPELINE_STEPS))
+                                step_placeholders = []
+                                for si, (icon, label) in enumerate(PIPELINE_STEPS):
+                                    with step_cols[si]:
+                                        ph = st.empty()
+                                        ph.markdown(f'<div class="pipeline-step-box step-pending">{icon}<br>{label}</div>',
+                                                    unsafe_allow_html=True)
+                                        step_placeholders.append(ph)
+
+                                detail_placeholder = st.empty()
+                                current_step_idx = [0]
+
                                 # Run pipeline
                                 status.write("🧠 Running cascade pipeline...")
                                 try:
                                     def on_progress(step, detail="", progress=0):
                                         status.write(f"⚙️ [{progress*100:.0f}%] {step}: {detail}")
+                                        # Update pipeline step boxes
+                                        step_idx_val = STEP_KEYS.index(step) if step in STEP_KEYS else current_step_idx[0]
+                                        for si2, (icon2, label2) in enumerate(PIPELINE_STEPS):
+                                            if si2 < step_idx_val:
+                                                step_placeholders[si2].markdown(
+                                                    f'<div class="pipeline-step-box step-complete">{icon2}<br>{label2}</div>',
+                                                    unsafe_allow_html=True)
+                                            elif si2 == step_idx_val:
+                                                step_placeholders[si2].markdown(
+                                                    f'<div class="pipeline-step-box step-active">{icon2}<br>{label2}</div>',
+                                                    unsafe_allow_html=True)
+                                        current_step_idx[0] = step_idx_val
+                                        detail_placeholder.caption(f"🔄 {detail}")
                                     
                                     run_res = pipeline.run_full_pipeline(
                                         video_path=tmp_path,
@@ -1125,6 +1152,13 @@ if st.session_state.results is None and st.session_state.tasks_results is None:
                                         max_correction_rounds=batch_max_rounds,
                                         on_progress=on_progress,
                                     )
+                                    
+                                    # Mark all steps complete
+                                    for si3, (icon3, label3) in enumerate(PIPELINE_STEPS):
+                                        step_placeholders[si3].markdown(
+                                            f'<div class="pipeline-step-box step-complete">{icon3}<br>{label3}</div>',
+                                            unsafe_allow_html=True)
+                                    detail_placeholder.caption("✅ Pipeline complete!")
                                     
                                     # Format for results.json
                                     captions_out = {s: run_res["captions"].get(s, "") for s in styles}
@@ -1304,7 +1338,7 @@ st.markdown("---")
 st.markdown(
     "<div style='text-align:center; color:#5c5c7a; font-size:0.75rem; padding:1.5rem;'>"
     "Rambler · Team <strong style='color:#ff3b43;'>Omnix</strong> · AMD Hackathon Track 2 · "
-    "Powered by Gemma on AMD ROCm"
+    "Powered by Gemma via Fireworks AI"
     "</div>",
     unsafe_allow_html=True
 )

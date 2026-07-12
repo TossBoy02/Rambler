@@ -1,1 +1,11 @@
-[]
+[
+  {
+    "task_id": "v1",
+    "captions": {
+      "formal": "This cinematic aerial sequence captures the dramatic intersection of natural topography and urban expansion. A slow pull-back reveals the stark contrast between the rugged granite peaks and the distant metropolitan skyline. The footage highlights the enduring majesty of the wilderness bordering a modern city.",
+      "sarcastic": "Oh look, nature. I'm so glad we have a drone to see these mountains so I don't have to actually break a sweat climbing them. And there's the city in the background, just in case you forgot that traffic and pollution still exist.",
+      "humorous_tech": "The render distance on this map is absolutely insane. I'm pretty sure this environment is just a high-res asset pack with a teal LUT applied to hide the low-poly city in the distance. 10/10 for the shaders, but I'm still waiting for the fast-travel point to load.",
+      "humorous_non_tech": "This is exactly where my GPS takes me whenever I click 'avoid highways.' It's all fun and games until you realize you're three mountains away from the nearest Starbucks. Just me, the trees, and a very confused delivery driver."
+    }
+  }
+]
