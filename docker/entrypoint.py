@@ -68,7 +68,7 @@ def process_task(task: dict) -> dict:
             styles=styles,
             on_progress=on_progress,
             eval_threshold=0.8,
-            max_correction_rounds=2,  # Keep conservative for time limit
+            max_correction_rounds=2,
         )
 
         # Build output in required format
@@ -92,11 +92,13 @@ def process_task(task: dict) -> dict:
 def main():
     print("\n🎬 Rambler — Team Omnix")
     print("AMD Hackathon Track 2: Video Captioning Agent")
-    print(f"API Key: {'✅' if pipeline.FIREWORKS_API_KEY else '❌ NOT SET'}")
+    print(f"Model: {pipeline.GEMMA_MODEL}")
+    print(f"API Key: {'✅ Set' if pipeline.FIREWORKS_API_KEY else '❌ NOT SET'}")
 
     if not pipeline.FIREWORKS_API_KEY:
-        print("\n❌ FIREWORKS_API_KEY environment variable not set!")
-        sys.exit(1)
+        print("\n⚠️  WARNING: FIREWORKS_API_KEY environment variable not set!")
+        print("Pass it with: docker run -e FIREWORKS_API_KEY=<your_key> ...")
+        print("Continuing anyway — API calls will fail.\n")
 
     # Read tasks
     tasks_path = Path("/input/tasks.json")
@@ -109,7 +111,7 @@ def main():
 
     print(f"\n📋 Found {len(tasks)} task(s) to process")
 
-    # Process each task
+    # Process each task — NEVER skip a task
     results = []
     for i, task in enumerate(tasks, 1):
         print(f"\n\n{'#'*60}")
@@ -121,7 +123,7 @@ def main():
             results.append(result)
         except Exception as e:
             print(f"\n❌ Error processing task {task.get('task_id', '?')}: {e}")
-            # Still add empty result so output has all tasks
+            # IMPORTANT: Still add a result with empty captions — never skip tasks
             results.append({
                 "task_id": task.get("task_id", "unknown"),
                 "captions": {s: "" for s in task.get("styles", pipeline.ALL_STYLES)}

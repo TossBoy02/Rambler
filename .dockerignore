@@ -1,6 +1,7 @@
 # Local settings & secrets
 .env
 .env.local
+.env.example
 
 # Virtual environments
 .venv/
@@ -32,8 +33,23 @@ Thumbs.db
 .idea/
 .agents/
 
+# Documentation & presentation (not needed in Docker)
+docs/
+*.pdf
+cover_image.png
+*.png
+!logo.png
+
+# Error logs & sample data
+error message.txt
+sample_videos/
+
 # Docker build logs & other local files
 docker-compose.yml
 Dockerfile.local
 docker/*.log
 *.log
+
+# Git
+.git/
+.gitignore

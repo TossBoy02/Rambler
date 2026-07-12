@@ -7,15 +7,19 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# Install Python dependencies
+# Install Python dependencies first (layer caching)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy all project files
 COPY . .
 
-# Expose port for Streamlit
+# Expose port for Streamlit (interactive mode)
 EXPOSE 8501
 
-# Entrypoint wrapper that switches modes automatically
+# FIREWORKS_API_KEY must be passed at runtime:
+#   docker run -e FIREWORKS_API_KEY=<key> ...
+ENV FIREWORKS_API_KEY=""
+
+# Entrypoint: auto-detects headless (if /input/tasks.json exists) or Streamlit mode
 ENTRYPOINT ["python", "docker/launcher.py"]

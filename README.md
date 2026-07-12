@@ -1,19 +1,19 @@
 # 🎬 Rambler — AI Video Captioning Agent
 
 **Team Omnix** · Abdelrahman Amr Ahmed Abdullah
-AMD Hackathon Track 2 | Powered by Gemma on AMD ROCm
+AMD Hackathon Track 2 | Powered by Gemma via Fireworks AI
 
 ---
 
 ## Short Description
 
-> AI video captioning agent that uses a multi-model Gemma cascade to analyze video frames and audio, generate captions in 4 distinct styles (formal, sarcastic, humorous-tech, humorous-non-tech), self-evaluate with confidence scoring, and auto-correct low-quality outputs — all running on AMD hardware via ROCm.
+> AI video captioning agent that uses Gemma 4 31B to analyze video frames and audio, generate captions in 4 distinct styles (formal, sarcastic, humorous-tech, humorous-non-tech), self-evaluate with confidence scoring, and auto-correct low-quality outputs — all powered by Google's Gemma model via Fireworks AI.
 
 ---
 
 ## Long Description
 
-**Rambler** is an intelligent video captioning pipeline that goes far beyond simple transcription. Given any short video clip (30s–2min), it performs deep multimodal analysis — extracting visual frames at 1fps, capturing audio waveforms, and synthesizing both modalities through Google's Gemma 4 model family running on AMD Instinct GPUs with ROCm.
+**Rambler** is an intelligent video captioning pipeline that goes far beyond simple transcription. Given any short video clip (30s–2min), it performs deep multimodal analysis — extracting visual frames at 1fps, capturing audio waveforms, and synthesizing both modalities through Google's Gemma 4 31B model via the Fireworks AI API.
 
 ### The Problem
 
@@ -23,20 +23,20 @@ Existing video captioning tools produce generic, one-size-fits-all descriptions.
 
 Rambler implements a **three-stage AI pipeline** that mirrors how a human editor would work:
 
-1. **Perception Stage** (`gemma-4-27b-it`): A multimodal Gemma model ingests sampled video frames and extracted audio simultaneously, producing a comprehensive scene analysis covering visual content, facial micro-expressions, environmental context, vocal qualities, and emotional arcs.
-2. **Styling Stage** (`gemma-4-26b-a4b-it`): A text-optimized Gemma model transforms the raw analysis into four distinct caption styles — **Formal** (BBC-quality narration), **Sarcastic** (dry wit and irony), **Humorous Tech** (programming jokes and Silicon Valley references), and **Humorous Non-Tech** (dad jokes and pop culture references).
-3. **Self-Correction Stage** (`gemma-4-26b-a4b-it`): A Gemma-powered evaluation judge scores each caption on accuracy (0–1) and style fidelity (0–1). Captions falling below a 0.8 threshold are automatically regenerated with targeted feedback for up to 3 correction rounds, ensuring consistently high quality.
+1. **Perception Stage** (`gemma-4-31b-it`): The multimodal Gemma model ingests sampled video frames and extracted audio simultaneously, producing a comprehensive scene analysis covering visual content, facial micro-expressions, environmental context, vocal qualities, and emotional arcs.
+2. **Styling Stage** (`gemma-4-31b-it`): The same Gemma model transforms the raw analysis into four distinct caption styles — **Formal** (BBC-quality narration), **Sarcastic** (dry wit and irony), **Humorous Tech** (programming jokes and Silicon Valley references), and **Humorous Non-Tech** (dad jokes and pop culture references).
+3. **Self-Correction Stage** (`gemma-4-31b-it`): Gemma evaluates its own captions, scoring each on accuracy (0–1) and style fidelity (0–1). Captions falling below a 0.8 threshold are automatically regenerated with targeted feedback for up to 3 correction rounds, ensuring consistently high quality.
 
 ### Key Features
 
-- **Multi-Model Gemma Cascade** — Different Gemma variants optimized for each pipeline stage
+- **Gemma 4 31B Powered** — Single multimodal Gemma model handles perception, styling, and evaluation
 - **Multimodal Ingestion** — Processes both video frames (OpenCV) and audio waveforms (FFmpeg)
 - **Facial Micro-Expression Analysis** — Detects subtle emotional cues like forced smiles and eyebrow drops
 - **Self-Correcting Agent Loop** — Gemma evaluates its own outputs and iteratively improves them
 - **Confidence Radar Charts** — Visual dashboard showing accuracy and style-match scores
 - **Dual Caption Display** — View captions as subtitle overlays on video or side-by-side comparison cards
 - **Interactive Demo** — Streamlit web app with drag-and-drop upload and real-time progress tracking
-- **AMD ROCm Native** — Designed to run directly on AMD Instinct GPUs for maximum performance
+- **Fireworks AI Cloud** — Scalable cloud inference via Fireworks AI API
 - **Docker Submission** — Headless pipeline for automated hackathon evaluation
 
 ### Target Audience
@@ -45,7 +45,7 @@ Content creators, video producers, accessibility teams, social media managers, a
 
 ### Technology Stack
 
-`Gemma 4` · `AMD ROCm` · `vLLM` · `Fireworks AI` · `Python` · `Streamlit` · `OpenCV` · `FFmpeg` · `Docker`
+`Gemma 4 31B` · `Fireworks AI` · `Python` · `Streamlit` · `OpenCV` · `FFmpeg` · `Docker`
 
 ---
 
@@ -66,20 +66,19 @@ Content creators, video producers, accessibility teams, social media managers, a
 │  Pipeline Engine (pipeline.py)                          │
 │  ├── Stage 1: Frame Extraction (OpenCV, 1fps)           │
 │  ├── Stage 2: Audio Extraction (FFmpeg, 16kHz WAV)      │
-│  ├── Stage 3: Multimodal Perception (Gemma 4 27B)       │
+│  ├── Stage 3: Multimodal Perception (Gemma 4 31B)       │
 │  │   └── Frames + Audio → Deep Scene Analysis           │
-│  ├── Stage 4: Style Synthesis (Gemma 4 26B-A4B)         │
+│  ├── Stage 4: Style Synthesis (Gemma 4 31B)             │
 │  │   └── Analysis → 4 Styled Captions (JSON)            │
-│  ├── Stage 5: Gemma Eval (Gemma 4 26B-A4B)              │
+│  ├── Stage 5: Gemma Eval (Gemma 4 31B)                  │
 │  │   └── Captions → Accuracy + Style Scores             │
 │  └── Stage 6: Self-Correction Loop                      │
 │      └── Re-generate captions below 0.8 threshold       │
 └──────────────────┬──────────────────────────────────────┘
                    │
 ┌──────────────────▼──────────────────────────────────────┐
-│  Inference Backend (configurable)                       │
-│  ├── Option A: AMD GPU + vLLM + ROCm (local)            │
-│  └── Option B: Fireworks AI API (cloud)                  │
+│  Fireworks AI Cloud API                                 │
+│  └── gemma-4-31b-it (all stages)                        │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -107,7 +106,7 @@ audio_b64 = extract_audio(video_path)
 
 ```json
 {
-  "model": "accounts/fireworks/models/gemma-4-27b-it",
+  "model": "accounts/fireworks/models/gemma-4-31b-it",
   "messages": [
     {
       "role": "system",
@@ -156,53 +155,62 @@ Targeted re-generation prompt with specific feedback on which dimension failed a
 
 - Python 3.10+
 - FFmpeg installed and on PATH
-- (Optional) AMD GPU with ROCm for local inference
+- Fireworks AI API key ([get one here](https://fireworks.ai))
 
 ### Quick Start
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/rambler-3.0.git
-cd rambler-3.0
+git clone https://github.com/TossBoy02/Rambler.git
+cd Rambler
 
 # Install dependencies
 pip install -r requirements.txt
 
-# Configure API key (if using Fireworks AI)
-cp .env.example .env
-# Edit .env with your FIREWORKS_API_KEY
+# Configure API key
+export FIREWORKS_API_KEY=your_fireworks_api_key
 
 # Run the Streamlit app
-streamlit run app.py
-```
-
-### Running on AMD Developer Cloud
-
-```bash
-# On the AMD AI Notebook (notebooks.amd.com/hackathon):
-git clone https://github.com/YOUR_USERNAME/rambler-3.0.git
-cd rambler-3.0
-pip install -r requirements.txt
-
-# Option A: Use Fireworks API
-echo 'FIREWORKS_API_KEY=your_key' > .env
-echo 'INFERENCE_BACKEND=fireworks' >> .env
-
-# Option B: Run Gemma locally on AMD GPU
-pip install vllm
-vllm serve google/gemma-4-27b-it --port 8080 &
-echo 'INFERENCE_BACKEND=local' > .env
-
-# Start the demo
 streamlit run app.py
 ```
 
 ### Docker (Headless Evaluation)
 
 ```bash
-docker build -t rambler-3.0 -f docker/Dockerfile .
-docker run -v /path/to/input:/input -v /path/to/output:/output \
-  -e FIREWORKS_API_KEY=your_key rambler-3.0
+# Build the image
+docker build -t rambler:latest -f docker/Dockerfile .
+
+# Run with tasks
+docker run --rm \
+  -e FIREWORKS_API_KEY=your_key \
+  -v /path/to/input:/input \
+  -v /path/to/output:/output \
+  rambler:latest
+```
+
+**Input format** (`/input/tasks.json`):
+```json
+[
+  {
+    "task_id": "v1",
+    "video_url": "https://example.com/video.mp4"
+  }
+]
+```
+
+**Output format** (`/output/results.json`):
+```json
+[
+  {
+    "task_id": "v1",
+    "captions": {
+      "formal": "A wide urban boulevard lined with golden ginkgo trees...",
+      "sarcastic": "A city that decided trees were a good idea...",
+      "humorous_tech": "Nature's annual deployment: all leaf nodes updated...",
+      "humorous_non_tech": "The trees got together and decided to put on a show..."
+    }
+  }
+]
 ```
 
 ---
@@ -210,16 +218,18 @@ docker run -v /path/to/input:/input -v /path/to/output:/output \
 ## Project Structure
 
 ```
-rambler-3.0/
+Rambler/
 ├── app.py                  # Streamlit demo application
 ├── pipeline.py             # Core captioning pipeline
 ├── requirements.txt        # Python dependencies
-├── .env.example            # Environment variable template
 ├── README.md               # This file
 ├── docker/
 │   ├── Dockerfile          # Hackathon submission image
-│   └── entrypoint.py       # Headless task runner
-└── sample_videos/          # Test video clips
+│   ├── entrypoint.py       # Headless task runner
+│   └── launcher.py         # Auto-detect mode (headless vs Streamlit)
+└── docs/
+    ├── generate_deck.py    # Presentation PDF generator
+    └── generate_cover.py   # Cover image generator
 ```
 
 ---
@@ -236,8 +246,7 @@ rambler-3.0/
 
 - **Event**: AMD Pervasive AI Developer Contest (lablab.ai)
 - **Track**: Track 2 — Video Captioning Agent
-- **Models**: Google Gemma 4 (27B-IT, 26B-A4B-IT)
-- **Hardware**: AMD Instinct GPUs with ROCm
+- **Model**: Google Gemma 4 31B-IT (via Fireworks AI)
 - **API**: Fireworks AI
 
 ---

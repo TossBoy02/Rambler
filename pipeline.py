@@ -18,25 +18,16 @@ from typing import List, Optional, Callable, Dict, Any
 
 
 # ── Configuration ──────────────────────────────────────────────
-INFERENCE_BACKEND = os.environ.get("INFERENCE_BACKEND", "fireworks")  # "fireworks" or "local"
+FIREWORKS_API_KEY = os.environ.get("FIREWORKS_API_KEY", "")
+API_URL = "https://api.fireworks.ai/inference/v1/chat/completions"
+GEMMA_MODEL = os.environ.get("GEMMA_MODEL", "accounts/fireworks/models/gemma-4-31b-it")
 
-if INFERENCE_BACKEND == "local":
-    # Local vLLM on AMD GPU (ROCm) — free, no API key needed
-    FIREWORKS_API_KEY = "not-needed"
-    PERCEPTION_API_URL = os.environ.get("LOCAL_API_URL", "http://localhost:8080/v1/chat/completions")
-    # Route styling and evaluation to LOCAL_API_URL_2 if provided, otherwise fallback to LOCAL_API_URL (Option A)
-    STYLING_API_URL = os.environ.get("LOCAL_API_URL_2", PERCEPTION_API_URL)
-    PERCEPTION_MODEL = os.environ.get("PERCEPTION_MODEL", "google/gemma-4-31b-it")
-    STYLING_MODEL    = os.environ.get("STYLING_MODEL",    "google/gemma-4-31b-it")
-    EVAL_MODEL       = os.environ.get("EVAL_MODEL",       "google/gemma-4-31b-it")
-else:
-    # Fireworks AI Cloud API
-    FIREWORKS_API_KEY = os.environ.get("FIREWORKS_API_KEY", "")
-    PERCEPTION_API_URL = "https://api.fireworks.ai/inference/v1/chat/completions"
-    STYLING_API_URL = PERCEPTION_API_URL
-    PERCEPTION_MODEL = os.environ.get("PERCEPTION_MODEL", "accounts/fireworks/models/gemma-4-31b-it")
-    STYLING_MODEL    = os.environ.get("STYLING_MODEL",    "accounts/fireworks/models/gemma-4-26b-a4b-it")
-    EVAL_MODEL       = os.environ.get("EVAL_MODEL",       "accounts/fireworks/models/gemma-4-26b-a4b-it")
+# Backward-compatible aliases (all point to the same model + endpoint)
+PERCEPTION_API_URL = API_URL
+STYLING_API_URL = API_URL
+PERCEPTION_MODEL = GEMMA_MODEL
+STYLING_MODEL = GEMMA_MODEL
+EVAL_MODEL = GEMMA_MODEL
 
 # ── Pipeline Styles ────────────────────────────────────────────
 ALL_STYLES = ["formal", "sarcastic", "humorous_tech", "humorous_non_tech"]

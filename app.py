@@ -1,7 +1,7 @@
 # ============================================================
 # Rambler — Streamlit Demo Application
 # Team Omnix | AMD Hackathon Track 2
-# Powered by Gemma on AMD ROCm
+# Powered by Gemma via Fireworks AI
 # ============================================================
 
 import streamlit as st
@@ -813,10 +813,8 @@ def render_run_results(results, video_bytes=None, video_url=None, key_suffix="")
         "correction_rounds": len(correction_history),
         "raw_insights": raw_insights,
         "pipeline_config": {
-            "backend": pipeline.INFERENCE_BACKEND,
-            "perception_model": pipeline.PERCEPTION_MODEL,
-            "styling_model": pipeline.STYLING_MODEL,
-            "eval_model": pipeline.EVAL_MODEL,
+            "backend": "fireworks",
+            "model": pipeline.GEMMA_MODEL,
         },
     }
 
