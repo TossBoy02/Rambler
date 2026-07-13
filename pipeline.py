@@ -21,7 +21,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ── Configuration ──────────────────────────────────────────────
-FIREWORKS_API_KEY = os.environ.get("FIREWORKS_API_KEY", "")
+# Embedded API key fallback as requested, allows run without credential injection
+FIREWORKS_API_KEY = os.environ.get("FIREWORKS_API_KEY", "fw_TdBEeyFGEntTmR4S5ubbNB")
 API_URL = "https://api.fireworks.ai/inference/v1/chat/completions"
 GEMMA_MODEL = os.environ.get("GEMMA_MODEL", "accounts/fireworks/models/gemma-4-31b-it")
 
@@ -30,7 +31,144 @@ PERCEPTION_API_URL = API_URL
 STYLING_API_URL = API_URL
 PERCEPTION_MODEL = GEMMA_MODEL
 STYLING_MODEL = GEMMA_MODEL
+DO_EVAL = True
 EVAL_MODEL = GEMMA_MODEL
+
+
+# ── Fireworks Deployment Manager ─────────────────────────────
+
+def get_account_id(api_key: str) -> str:
+    """Retrieve the Fireworks account ID associated with the API key."""
+    if not api_key:
+        return "toss-boy"
+    try:
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        r = requests.get("https://api.fireworks.ai/v1/accounts", headers=headers, timeout=15)
+        if r.status_code == 200:
+            data = r.json()
+            accounts = data.get("accounts", [])
+            if accounts:
+                name = accounts[0].get("name", "")
+                if name.startswith("accounts/"):
+                    return name.split("/")[-1]
+        elif r.status_code == 412:
+            import re
+            msg = r.json().get("error", {}).get("message", "")
+            match = re.search(r"Account\s+(\S+)\s+is\s+suspended", msg)
+            if match:
+                return match.group(1)
+    except Exception as e:
+        print(f"[DEPLOYER] Error getting account ID: {e}")
+    return "toss-boy"
+
+
+def get_active_gemma_deployment(api_key: str, account_id: str) -> Optional[str]:
+    """Check if there is already an active READY deployment of gemma-4-31b-it to reuse."""
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    url = f"https://api.fireworks.ai/v1/accounts/{account_id}/deployments"
+    try:
+        r = requests.get(url, headers=headers, timeout=30)
+        if r.status_code == 200:
+            data = r.json()
+            for d in data.get("deployments", []):
+                if d.get("baseModel") == "accounts/fireworks/models/gemma-4-31b-it" and d.get("state") == "READY":
+                    return d.get("name")
+    except Exception as e:
+        print(f"[DEPLOYER] Exception listing deployments: {e}")
+    return None
+
+
+def create_fireworks_deployment(api_key: str, account_id: str, base_model: str) -> Optional[str]:
+    """Create a new custom deployment on Fireworks AI for the given base model."""
+    import random
+    import string
+    
+    rand_suffix = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
+    deployment_id = f"rambler-eval-{rand_suffix}"
+    
+    url = f"https://api.fireworks.ai/v1/accounts/{account_id}/deployments?deploymentId={deployment_id}"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "baseModel": base_model,
+        "displayName": f"Rambler Auto-Deployment {rand_suffix}",
+        "minReplicaCount": 1,
+        "maxReplicaCount": 1
+    }
+    
+    print(f"[DEPLOYER] Creating Fireworks deployment {deployment_id} for {base_model}...")
+    try:
+        r = requests.post(url, headers=headers, json=payload, timeout=30)
+        if r.status_code == 200:
+            data = r.json()
+            deployment_name = data.get("name", "")
+            print(f"[DEPLOYER] Deployment created: {deployment_name}")
+            return deployment_name
+        else:
+            print(f"[DEPLOYER] Failed to create deployment: {r.status_code} - {r.text}")
+    except Exception as e:
+        print(f"[DEPLOYER] Exception creating deployment: {e}")
+    return None
+
+
+def wait_for_deployment_ready(api_key: str, deployment_name: str, timeout_seconds: int = 600) -> bool:
+    """Poll the status of the custom deployment until it reaches READY state."""
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    url = f"https://api.fireworks.ai/v1/{deployment_name}"
+    
+    start_time = time.time()
+    print(f"[DEPLOYER] Waiting for deployment {deployment_name} to become READY...")
+    
+    while time.time() - start_time < timeout_seconds:
+        try:
+            r = requests.get(url, headers=headers, timeout=15)
+            if r.status_code == 200:
+                data = r.json()
+                state = data.get("state", "STATE_UNSPECIFIED")
+                print(f"[DEPLOYER] Deployment state: {state}")
+                if state == "READY":
+                    return True
+                elif state == "FAILED":
+                    print("[DEPLOYER] Deployment failed on Fireworks.")
+                    return False
+            else:
+                print(f"[DEPLOYER] Error polling deployment: {r.status_code} - {r.text}")
+        except Exception as e:
+            print(f"[DEPLOYER] Exception polling deployment: {e}")
+        
+        time.sleep(15)
+        
+    print("[DEPLOYER] Timeout waiting for deployment to become READY.")
+    return False
+
+
+def delete_fireworks_deployment(api_key: str, deployment_name: str) -> bool:
+    """Delete/undeploy the custom deployment to stop incurring charges."""
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    url = f"https://api.fireworks.ai/v1/{deployment_name}"
+    
+    print(f"[DEPLOYER] Deleting custom Fireworks deployment {deployment_name}...")
+    try:
+        r = requests.delete(url, headers=headers, timeout=30)
+        if r.status_code == 200:
+            print("[DEPLOYER] Deployment successfully deleted.")
+            return True
+        else:
+            print(f"[DEPLOYER] Failed to delete deployment: {r.status_code} - {r.text}")
+    except Exception as e:
+        print(f"[DEPLOYER] Exception deleting deployment: {e}")
+    return False
 
 # ── Pipeline Styles ────────────────────────────────────────────
 ALL_STYLES = ["formal", "sarcastic", "humorous_tech", "humorous_non_tech"]
@@ -707,65 +845,114 @@ def run_full_pipeline(
         - thumbnails: list of thumbnail base64 strings
         - raw_insights: the analysis text
     """
+    global GEMMA_MODEL, PERCEPTION_MODEL, STYLING_MODEL, EVAL_MODEL
+
     if styles is None:
         styles = ALL_STYLES
     if on_progress is None:
         on_progress = _noop_progress
 
-    video_path = str(video_path)
+    # Track original model configuration so we can restore it safely
+    orig_gemma = GEMMA_MODEL
+    orig_perc = PERCEPTION_MODEL
+    orig_style = STYLING_MODEL
+    orig_eval = EVAL_MODEL
+    
+    created_deployment = None
 
-    # Step 1: Video Info
-    on_progress("video_info", "Reading video metadata...", 0.05)
-    info = get_video_info(video_path)
+    # Auto-deployment triggers only when requesting the base model path
+    if GEMMA_MODEL == "accounts/fireworks/models/gemma-4-31b-it" and FIREWORKS_API_KEY:
+        on_progress("deploying", "Auto-checking / deploying Gemma model on Fireworks...", 0.02)
+        account_id = get_account_id(FIREWORKS_API_KEY)
+        
+        # Check if a READY deployment is already active
+        existing_deployment = get_active_gemma_deployment(FIREWORKS_API_KEY, account_id)
+        if existing_deployment:
+            print(f"[DEPLOYER] Reusing active deployment: {existing_deployment}")
+            deployment_name = existing_deployment
+        else:
+            # Create new deployment
+            deployment_name = create_fireworks_deployment(FIREWORKS_API_KEY, account_id, GEMMA_MODEL)
+            if deployment_name:
+                created_deployment = deployment_name
+                # Wait until ready
+                ready = wait_for_deployment_ready(FIREWORKS_API_KEY, deployment_name)
+                if not ready:
+                    print("[DEPLOYER] WARNING: Deployment did not reach READY state. Continuing anyway...")
+        
+        if deployment_name:
+            # Overwrite the runtime model configurations
+            GEMMA_MODEL = deployment_name
+            PERCEPTION_MODEL = deployment_name
+            STYLING_MODEL = deployment_name
+            EVAL_MODEL = deployment_name
 
-    # Step 2: Extract Frames
-    on_progress("extracting_frames", f"Extracting frames at 1fps...", 0.1)
-    frames = extract_frames(video_path, fps=1, max_frames=30)
+    try:
+        video_path = str(video_path)
 
-    # Step 3: Extract Thumbnails
-    on_progress("extracting_thumbnails", "Generating filmstrip thumbnails...", 0.15)
-    thumbnails = extract_frames_thumbnails(video_path, count=12)
+        # Step 1: Video Info
+        on_progress("video_info", "Reading video metadata...", 0.05)
+        info = get_video_info(video_path)
 
-    # Step 4: Extract Audio
-    on_progress("extracting_audio", "Extracting audio track...", 0.2)
-    audio = extract_audio(video_path)
+        # Step 2: Extract Frames
+        on_progress("extracting_frames", f"Extracting frames at 1fps...", 0.1)
+        frames = extract_frames(video_path, fps=1, max_frames=30)
 
-    # Step 5: Build Payload
-    on_progress("building_payload", "Building multimodal payload...", 0.25)
-    payload = build_multimodal_payload(frames, audio, ANALYSIS_PROMPT)
+        # Step 3: Extract Thumbnails
+        on_progress("extracting_thumbnails", "Generating filmstrip thumbnails...", 0.15)
+        thumbnails = extract_frames_thumbnails(video_path, count=12)
 
-    # Step 6: Multimodal Analysis
-    on_progress("analyzing", "Running Gemma perception analysis...", 0.3)
-    raw_insights = analyze_video(payload)
+        # Step 4: Extract Audio
+        on_progress("extracting_audio", "Extracting audio track...", 0.2)
+        audio = extract_audio(video_path)
 
-    # Step 7: Generate Styled Captions
-    on_progress("styling", "Generating styled captions...", 0.55)
-    captions = structure_output(raw_insights, styles=styles)
+        # Step 5: Build Payload
+        on_progress("building_payload", "Building multimodal payload...", 0.25)
+        payload = build_multimodal_payload(frames, audio, ANALYSIS_PROMPT)
 
-    # Step 8: Gemma Eval
-    on_progress("evaluating", "Running Gemma evaluation...", 0.7)
-    scores = gemma_eval(captions, raw_insights)
+        # Step 6: Multimodal Analysis
+        on_progress("analyzing", "Running Gemma perception analysis...", 0.3)
+        raw_insights = analyze_video(payload)
 
-    # Step 9: Self-Correction Loop
-    on_progress("self_correction", "Self-correction loop...", 0.8)
-    final_captions, final_scores, correction_history = self_correct(
-        captions, raw_insights, scores,
-        threshold=eval_threshold,
-        max_rounds=max_correction_rounds,
-        on_progress=on_progress,
-    )
+        # Step 7: Generate Styled Captions
+        on_progress("styling", "Generating styled captions...", 0.55)
+        captions = structure_output(raw_insights, styles=styles)
 
-    on_progress("complete", "Pipeline complete!", 1.0)
+        # Step 8: Gemma Eval
+        on_progress("evaluating", "Running Gemma evaluation...", 0.7)
+        scores = gemma_eval(captions, raw_insights)
 
-    return {
-        "captions": final_captions,
-        "scores": final_scores,
-        "correction_history": correction_history,
-        "initial_scores": scores,
-        "video_info": info,
-        "thumbnails": thumbnails,
-        "raw_insights": raw_insights,
-    }
+        # Step 9: Self-Correction Loop
+        on_progress("self_correction", "Self-correction loop...", 0.8)
+        final_captions, final_scores, correction_history = self_correct(
+            captions, raw_insights, scores,
+            threshold=eval_threshold,
+            max_rounds=max_correction_rounds,
+            on_progress=on_progress,
+        )
+
+        on_progress("complete", "Pipeline complete!", 1.0)
+
+        return {
+            "captions": final_captions,
+            "scores": final_scores,
+            "correction_history": correction_history,
+            "initial_scores": scores,
+            "video_info": info,
+            "thumbnails": thumbnails,
+            "raw_insights": raw_insights,
+        }
+
+    finally:
+        # Tear down custom deployment if we created it
+        if created_deployment:
+            delete_fireworks_deployment(FIREWORKS_API_KEY, created_deployment)
+        
+        # Restore configuration to original state
+        GEMMA_MODEL = orig_gemma
+        PERCEPTION_MODEL = orig_perc
+        STYLING_MODEL = orig_style
+        EVAL_MODEL = orig_eval
 
 # Alias for compatibility with app.py
 run_pipeline = run_full_pipeline
