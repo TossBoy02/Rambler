@@ -28,7 +28,7 @@ def main():
     if os.path.exists(tasks_path):
         print("📋 /input/tasks.json detected! Running in headless evaluation mode...")
         try:
-            result = subprocess.run(["python", "docker/entrypoint.py"])
+            result = subprocess.run(["python", "-u", "docker/entrypoint.py"])
             sys.exit(result.returncode)
         except Exception as e:
             print(f"❌ Failed to run entrypoint.py: {e}")

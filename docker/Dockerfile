@@ -17,9 +17,12 @@ COPY . .
 # Expose port for Streamlit (interactive mode)
 EXPOSE 8501
 
+# Force unbuffered Python stdout/stderr streams
+ENV PYTHONUNBUFFERED=1
+
 # FIREWORKS_API_KEY must be passed at runtime:
 #   docker run -e FIREWORKS_API_KEY=<key> ...
 ENV FIREWORKS_API_KEY=""
 
-# Entrypoint: auto-detects headless (if /input/tasks.json exists) or Streamlit mode
-ENTRYPOINT ["python", "docker/launcher.py"]
+# Default entrypoint: reads /input/tasks.json, writes /output/results.json, and exits cleanly
+ENTRYPOINT ["python", "-u", "docker/entrypoint.py"]

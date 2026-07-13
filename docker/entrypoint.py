@@ -9,10 +9,19 @@ Reads /input/tasks.json, processes each video, writes /output/results.json.
 import json
 import os
 import sys
-import tempfile
-import requests
 from pathlib import Path
 
+# Add project root to path so we can import modules
+sys.path.insert(0, str(Path(__file__).parent.parent.absolute()))
+
+# Ensure stdout and stderr handle emojis and UTF-8 characters without crashing on Windows or non-UTF-8 terminals
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8')
+
+import tempfile
+import requests
 import pipeline
 
 

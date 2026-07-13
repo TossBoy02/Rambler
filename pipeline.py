@@ -15,7 +15,10 @@ import time
 from pathlib import Path
 from pydantic import BaseModel, ValidationError
 from typing import List, Optional, Callable, Dict, Any
+from dotenv import load_dotenv
 
+# Load env variables from .env if present
+load_dotenv()
 
 # ── Configuration ──────────────────────────────────────────────
 FIREWORKS_API_KEY = os.environ.get("FIREWORKS_API_KEY", "")
